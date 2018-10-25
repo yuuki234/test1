@@ -1,0 +1,144 @@
+srcdir      = @srcdir@
+VPATH       = $(srcdir)
+top_builddir = @top_builddir@
+top_srcdir   = @top_srcdir@
+build        = @build@
+host         = @host@
+
+MANPAGES = gosh.1 gauche-config.1 gauche-install.1 gauche-package.1 \
+           gauche-cesconv.1
+EXTRACTED = gauche-refe.texi gauche-refj.texi \
+	    gauche-deve.texi gauche-devj.texi
+GENERATED = Makefile $(MANPAGES)
+@CROSS_COMPILING_no@GOSH = $(top_builddir)/src/gosh -q -ftest
+@CROSS_COMPILING_yes@GOSH = gosh -q
+INSTALL      = @INSTALL@
+INSTALL_DATA = @INSTALL_DATA@
+MKINSTDIR    = $(top_srcdir)/mkinstalldirs
+MAKEINFO     = @MAKEINFO@
+GZIP_PROGRAM = @GZIP_PROGRAM@
+VERSION_INFO = @PACKAGE_STRING@
+
+MAKEDOC = $(GOSH) $(srcdir)/makedoc.scm
+
+TEXIS = concepts.texi      \
+	corelib.texi       \
+	coresyn.texi       \
+        gauche-dev.texi    \
+	gauche-ref.texi    \
+	indexcl.texi       \
+	indexfn.texi       \
+	indexmd.texi       \
+	indexvr.texi       \
+	intro.texi         \
+	macro.texi         \
+	mapping.texi       \
+	modgauche.texi     \
+	modintro.texi      \
+	modr7rs.texi       \
+	modsrfi.texi       \
+	modutil.texi       \
+	object.texi        \
+	program.texi       \
+	references.texi    \
+	srfis.texi
+
+# Manual page destination.  Default @mandir@ doesn't include 'share'
+# in the path, so I redefine it---a user can still override it by
+# make mandir=wherever
+prefix      = @prefix@
+datadir     = @datadir@
+datarootdir = @datarootdir@
+mandir      = @mandir@
+infodir     = @infodir@
+
+DESTDIR =
+
+.PHONY: all install uninstall pre-package check test \
+	texi html htmls dvi pdf info \
+	clean distclean maintainer-clean
+
+.SUFFIXES: .texi .html .info.gz .pdf .dvi
+
+all: info
+
+install: all
+	if test ! -d "$(DESTDIR)$(mandir)/man1"; then $(MKINSTDIR) "$(DESTDIR)$(mandir)/man1"; fi
+	$(INSTALL_DATA) $(MANPAGES) "$(DESTDIR)$(mandir)/man1"
+	if test ! -d "$(DESTDIR)$(infodir)"; then $(MKINSTDIR) "$(DESTDIR)$(infodir)"; fi
+	if test -f gauche-refe.info.gz -o -f gauche-refj.info.gz; then \
+	  for info in *.info*; do \
+	    $(INSTALL_DATA) $$info "$(DESTDIR)$(infodir)/"; \
+	  done; \
+	fi
+
+uninstall:
+	(cd "$(mandir)/man1"; rm -f $(MANPAGES))
+	(cd "$(infodir)"; \
+	 if test -f gauche-refe.info -o -f gauche-refe.info.gz; \
+	   then rm -f gauche-refe.*; \
+	 fi; \
+	 if test -f gauche-refj.info -o -f gauche-refj.info.gz; \
+	   then rm -f gauche-refj.*; \
+	 fi)
+
+pre-package : texi
+
+check :
+
+test :
+
+%.html : %.texi
+	$(MAKEDOC) html $< "$(MAKEINFO)"
+
+%/index.html : %.texi
+	$(MAKEDOC) htmls $< "$(MAKEINFO)" "$(VERSION_INFO)"
+
+%.info.gz : %.texi
+	$(MAKEDOC) info $< "$(MAKEINFO)" "$(GZIP_PROGRAM)"
+
+%.pdf : %.texi
+	$(MAKEDOC) pdf $< "$(MAKEINFO)"
+
+%.dvi : %.texi
+	$(MAKEDOC) dvi $< "$(MAKEINFO)"
+
+# special rule to regenerate srfis.texi in case srfis.scm is modified.
+srfis.texi : $(top_builddir)/src/srfis.scm
+	cd $(top_builddir)/src; $(MAKE) libsrfis.scm
+
+
+texi : gauche-refe.texi gauche-refj.texi
+html : gauche-refe.html gauche-refj.html
+htmls : gauche-refe/index.html gauche-refj/index.html
+dvi : gauche-refe.dvi gauche-refj.dvi
+pdf : gauche-refe.pdf gauche-refj.pdf
+info : gauche-refe.info.gz gauche-refj.info.gz
+
+gauche-refe.texi : $(TEXIS) extract.scm
+	$(GOSH) $(srcdir)/extract.scm -en -o gauche-refe.texi $(srcdir)/gauche-ref.texi
+
+gauche-refj.texi : $(TEXIS) extract.scm
+	$(GOSH) $(srcdir)/extract.scm -jp -o gauche-refj.texi $(srcdir)/gauche-ref.texi
+
+gauche-deve.texi : gauche-dev.texi extract.scm
+	$(GOSH) $(srcdir)/extract.scm -en -o gauche-deve.texi gauche-dev.texi
+
+gauche-devj.texi : gauche-dev.texi extract.scm
+	$(GOSH) $(srcdir)/extract.scm -jp -o gauche-devj.texi gauche-dev.texi
+
+clean:
+	rm -f core *~ \
+	      $(EXTRACTED:.texi=.pdf)   \
+	      $(EXTRACTED:.texi=.dvi)   \
+	      $(EXTRACTED:.texi=.info*) \
+	      $(EXTRACTED:.texi=.html)  \
+	      $(EXTRACTED)
+	rm -rf $(EXTRACTED:.texi=/)
+	rm -rf $(EXTRACTED:.texi=.t2d/)
+
+distclean : clean
+	rm -f $(GENERATED)
+
+maintainer-clean : clean
+	rm -f $(GENERATED)

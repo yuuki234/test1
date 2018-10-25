@@ -1,0 +1,32 @@
+srcdir       = @srcdir@
+top_builddir = @top_builddir@
+top_srcdir   = @top_srcdir@
+
+include ../Makefile.ext
+
+XCPPFLAGS = @ZLIB_CPPFLAGS@
+XLDFLAGS  = @ZLIB_LDFLAGS@
+XLIBS     = @ZLIB_LIB@
+
+SCM_CATEGORY = rfc
+
+LIBFILES = @ZLIB_ARCHFILES@
+SCMFILES = @ZLIB_SCMFILES@
+
+OBJECTS = @ZLIB_OBJECTS@
+
+GENERATED = Makefile
+XCLEANFILES = rfc--zlib.c zlib.sci
+
+all : $(LIBFILES)
+
+rfc--zlib.$(SOEXT) : $(OBJECTS)
+	$(MODLINK) rfc--zlib.$(SOEXT) $(OBJECTS) $(EXT_LIBGAUCHE) $(LIBS)
+
+$(OBJECTS) : gauche-zlib.h
+
+rfc--zlib.c zlib.sci : zlib.scm
+	$(PRECOMP) -e -P -o rfc--zlib $(srcdir)/zlib.scm
+
+install : install-std
+

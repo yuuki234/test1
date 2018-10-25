@@ -1,0 +1,570 @@
+#
+# Makefile.in for Gauche/src
+#
+
+# prelude ---------------------------------------------
+
+.PHONY: all test check pre-package install install-core install-aux uninstall \
+	clean distclean maintainer-clean install-check char-data
+
+.SUFFIXES:
+.SUFFIXES: .S .c .o .obj .s .scm .stub .in .exe
+
+.c.obj:
+	$(COMPILE) -c `cygpath -w $<`
+
+.c.o:
+	$(COMPILE) -c $<
+
+.s.o:
+	$(COMPILE) -c $<
+
+.S.o:
+	$(COMPILE) -c $<
+
+.stub.c:
+	$(BUILD_GOSH) ./genstub -D LIBGAUCHE_BODY $<
+
+.scm.c:
+	$(BUILD_GOSH) $(PRECOMP) $<
+
+SHELL       = @SHELL@
+prefix      = @prefix@
+exec_prefix = @exec_prefix@
+bindir      = @bindir@
+libdir      = @libdir@
+srcdir      = @srcdir@
+datadir     = @datadir@
+datarootdir = @datarootdir@
+VPATH       = $(srcdir)
+top_builddir = @top_builddir@
+top_srcdir   = @top_srcdir@
+
+# for cross build
+build = @build@
+host  = @host@
+
+# These may be overridden by make invocators
+DESTDIR  =
+CC       = @CC@
+AR       = @AR@
+LIBS     = @LIBS@
+LN_S     = @LN_S@
+CFLAGS   = @CFLAGS@ @SHLIB_SO_CFLAGS@
+CPPFLAGS = @CPPFLAGS@
+LDFLAGS  = @LDFLAGS@
+BUILD_GOSH_FLAGS =
+
+# These are set by configure
+ATOMIC_OPS_CFLAGS = @ATOMIC_OPS_CFLAGS@
+ATOMIC_OPS_LIBS   = @ATOMIC_OPS_LIBS@
+DEFS     = @DEFS@
+OPTFLAGS = @OPTFLAGS@
+INCLUDES = -I$(srcdir) -I. -I$(srcdir)/../gc/include -I../gc/include $(ATOMIC_OPS_CFLAGS) @LOCAL_INC@
+OBJEXT   = @OBJEXT@
+EXEEXT   = @EXEEXT@
+LIBGAUCHE = @LIBGAUCHE@
+LIBGAUCHE_STATIC = @LIBGAUCHE_STATIC@
+SOEXT    = @SHLIB_DYLIB_SUFFIX@
+LINK_HELPER = @LINK_HELPER@
+RPATH_TMP  = @RPATH_TMP@
+RPATH_REAL = @RPATH_REAL@
+SONAME_FLAG = @SONAME_FLAG@
+MAKEVERSLINK       = @MAKEVERSLINK@
+GAUCHE_VERSION     = @GAUCHE_VERSION@
+GAUCHE_ABI_VERSION = @GAUCHE_ABI_VERSION@
+
+# Main definition of compilation commands
+COMPILE   = $(CC) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(CFLAGS) $(OPTFLAGS)
+MKINSTDIR = $(top_srcdir)/mkinstalldirs
+CCLD      = $(LINK_HELPER) $(CC)
+LINK      = TARGETLIB="`pwd`" $(CCLD) $(CFLAGS) $(RPATH_TMP) -L. $(LDFLAGS)
+RELINK    = TARGETLIB="$(TARGETLIB)" $(CCLD) $(CFLAGS) $(RPATH_REAL) -L. $(LDFLAGS)
+INSTALL      = @INSTALL@
+INSTALL_DATA = @INSTALL_DATA@
+POSTBUILD   = TARGETLIB="`pwd`" DESTDIR= $(MAKEVERSLINK) $(LIBGAUCHE).$(SOEXT)
+POSTINSTALL = TARGETLIB="$(TARGETLIB)" DESTDIR="$(DESTDIR)" $(MAKEVERSLINK) $(LIBGAUCHE).$(SOEXT) ; \
+              TARGETLIB="$(LIB_INSTALL_DIR)" DESTDIR="$(DESTDIR)" $(MAKEVERSLINK) $(LIBGAUCHE).$(SOEXT)
+PREUNINSTALL = TARGETLIB="$(TARGETLIB)" DESTDIR="$(DESTDIR)" $(MAKEVERSLINK) -d $(LIBGAUCHE).$(SOEXT); \
+               TARGETLIB="$(LIB_INSTALL_DIR)" DESTDIR="$(DESTDIR)" $(MAKEVERSLINK) -d $(LIBGAUCHE).$(SOEXT)
+
+PRECOMP   = $(srcdir)/precomp -D LIBGAUCHE_BODY
+
+# Gosh command used to build static library.  In case of cross compiling
+# we can't use freshly built gosh.
+@CROSS_COMPILING_no@STATIC_GOSH  = $(top_builddir)/src/gosh -ftest
+@CROSS_COMPILING_yes@STATIC_GOSH = $(BUILD_GOSH)
+
+# List files that may affect stub generation.  If any of these files are
+# touched, stub files in src/ need to be regenerated.  (NB: Regeneration of
+# those files requires installed Gauche.  So only list files that absolutely
+# require regeneration.)
+GENSTUB_DEPENDENCY = genstub \
+		     $(top_srcdir)/lib/gauche/cgen/stub.scm
+PRECOMP_DEPENDENCY = precomp vminsn.scm ../lib/gauche/vm/insn.scm \
+		     $(GENSTUB_DEPENDENCY)
+
+# for cross build
+BUILD_CC     = @BUILD_CC@
+BUILD_CFLAGS = -O2
+
+# BUILD_GOSH is the gosh command used to generate some of the source files.
+# We need to 'preload' some libraries from the host's environment, for
+# the ones in the source tree may be incompatible with the host gosh.
+# (NB: BUILD_GOSH is only invoked building from CVS; it won't be called
+# when building from tarball.)
+# We clear GAUCHE_LOAD_PATH to make sure we won't read nonstandard stuff.
+BUILD_GOSH  = GAUCHE_LOAD_PATH="" GAUCHE_DYNLOAD_PATH="" \
+              "@BUILD_GOSH@" $(BUILD_GOSH_FLAGS) \
+              -l$(srcdir)/preload \
+              -I$(top_srcdir)/src -I$(top_srcdir)/lib \
+	      -I$(top_builddir)/lib
+
+LIB_INSTALL_DIR  = @libdir@
+BIN_INSTALL_DIR  = @bindir@
+DATA_INSTALL_DIR = $(datadir)
+
+GAUCHE_DATA_DIR = $(datadir)/gauche-$(GAUCHE_ABI_VERSION)
+GAUCHE_ARCH_DIR = @libdir@/gauche-$(GAUCHE_ABI_VERSION)
+
+HEADER_INSTALL_DIR    = $(GAUCHE_ARCH_DIR)/$(GAUCHE_VERSION)/include
+SCM_INSTALL_DIR       = $(GAUCHE_DATA_DIR)/$(GAUCHE_VERSION)/lib
+ARCH_INSTALL_DIR      = $(GAUCHE_ARCH_DIR)/$(GAUCHE_VERSION)/@host@
+SITE_SCM_DIR          = $(GAUCHE_DATA_DIR)/site/lib
+SITE_ARCH_DIR         = $(GAUCHE_ARCH_DIR)/site/@host@
+ARCH = @host@
+
+# TARGETLIB is given when we relink the final version of gosh to embed
+# the path to libgauche.  Usually it is ARCH_INSTALL_DIR (not LIB_INSTALL_DIR,
+# so that we can keep muliple versions of gosh coexist).   The variable
+# may be overridden in certain circumstances (e.g. MacOSX framework build).
+TARGETLIB=$(ARCH_INSTALL_DIR)
+
+INSTALL_HEADERS = gauche.h \
+	../gc/include/gc.h ../gc/include/gc_allocator.h \
+	../gc/include/gc_config_macros.h ../gc/include/gc_cpp.h \
+	../gc/include/gc_inline.h ../gc/include/gc_mark.h \
+	../gc/include/gc_pthread_redirects.h ../gc/include/gc_tiny_fl.h \
+	../gc/include/gc_typed.h ../gc/include/gc_version.h 
+INSTALL_SUBHEADERS = \
+	gauche/bignum.h gauche/bits.h gauche/bits_inline.h \
+	gauche/bytes_inline.h \
+	gauche/char_euc_jp.h gauche/char_none.h \
+	gauche/char_sjis.h gauche/char_utf_8.h gauche/charset.h \
+	gauche/class.h gauche/code.h gauche/collection.h \
+	gauche/config.h gauche/config_threads.h gauche/compare.h \
+	gauche/exception.h gauche/extend.h gauche/extern.h \
+	gauche/float.h gauche/gloc.h \
+	gauche/hash.h gauche/int64.h gauche/load.h \
+	gauche/module.h gauche/number.h gauche/parameter.h \
+	gauche/paths.h gauche/port.h gauche/prof.h gauche/pthread.h \
+	gauche/reader.h gauche/regexp.h gauche/scmconst.h \
+	gauche/static.h gauche/string.h gauche/symbol.h gauche/system.h \
+	gauche/treemap.h gauche/uthread.h gauche/vector.h gauche/vm.h \
+	gauche/vminsn.h gauche/weak.h gauche/win-compat.h gauche/writer.h \
+	gauche/wthread.h
+
+INSTALL_LIBS = $(LIBGAUCHE).$(SOEXT) $(LIBGAUCHE_STATIC).a
+INSTALL_BINS = gosh$(EXEEXT)           \
+	       @ALTERNATIVE_GOSH@      \
+	       gauche-config$(EXEEXT)  \
+               gauche-install$(EXEEXT) \
+	       gauche-package$(EXEEXT) \
+	       gauche-cesconv$(EXEEXT)
+INSTALL_SCMS = genstub precomp gencomp cesconv build-standalone
+
+GENERATED_SCRIPTS = gauche-install gauche-package gauche-cesconv
+
+PRIVATE_HEADERS = gauche/priv/arith.h gauche/priv/arith_i386.h \
+	          gauche/priv/arith_x86_64.h \
+	          gauche/priv/dws_adapter.h \
+	          gauche/priv/builtin-syms.h gauche/priv/codeP.h \
+		  gauche/priv/classP.h gauche/priv/dispatchP.h \
+	          gauche/priv/identifierP.h gauche/priv/macroP.h \
+                  gauche/priv/moduleP.h gauche/priv/portP.h \
+	          gauche/priv/readerP.h gauche/priv/writerP.h
+
+# MinGW specific
+INSTALL_MINGWHEADERS = gauche/win-compat.h
+
+# build -----------------------------------------------
+
+GCLIB = ../gc/libgc.la
+
+gosh_SOURCES = main.c
+gosh_OBJECTS = main.$(OBJEXT)
+gosh_noconsole_OBJECTS = winmain.$(OBJEXT)
+gosh_LDADD   = -l@LINKGAUCHE@
+gosh_LDFLAGS = @SHLIB_MAIN_LDFLAGS@
+
+test_extra_SOURCES = test-extra.c libextra.scm
+test_extra_OBJECTS = test-extra.$(OBJEXT) libextra.$(OBJEXT)
+test_extra_LDADD   = -l@LINKGAUCHE@
+test_extra_LDFLAGS = @SHLIB_MAIN_LDFLAGS@
+
+libgauche_LIBRARY = $(LIBGAUCHE).$(SOEXT)
+libgauche_OBJECTS = \
+        box.$(OBJEXT) core.$(OBJEXT) vm.$(OBJEXT) compaux.$(OBJEXT) \
+	macro.$(OBJEXT) \
+	code.$(OBJEXT) error.$(OBJEXT) class.$(OBJEXT) dispatch.$(OBJEXT) \
+        prof.$(OBJEXT) collection.$(OBJEXT) \
+	boolean.$(OBJEXT) char.$(OBJEXT) string.$(OBJEXT) list.$(OBJEXT) \
+	hash.$(OBJEXT) dws32hash.$(OBJEXT) dwsiphash.$(OBJEXT) \
+	treemap.$(OBJEXT) bits.$(OBJEXT) \
+	port.$(OBJEXT) write.$(OBJEXT) read.$(OBJEXT) \
+	vector.$(OBJEXT) weak.$(OBJEXT) symbol.$(OBJEXT) \
+	gloc.$(OBJEXT) compare.$(OBJEXT) regexp.$(OBJEXT) signal.$(OBJEXT) \
+	parameter.$(OBJEXT) module.$(OBJEXT) proc.$(OBJEXT) \
+	number.$(OBJEXT) bignum.$(OBJEXT) load.$(OBJEXT) paths.$(OBJEXT) \
+	lazy.$(OBJEXT) repl.$(OBJEXT) autoloads.$(OBJEXT) system.$(OBJEXT) \
+	compile.$(OBJEXT) \
+	libalpha.$(OBJEXT) libbool.$(OBJEXT) libchar.$(OBJEXT) \
+	libcode.$(OBJEXT) libcmp.$(OBJEXT) libdict.$(OBJEXT) libeval.$(OBJEXT) \
+	libexc.$(OBJEXT) libfmt.$(OBJEXT) libio.$(OBJEXT) \
+	liblazy.$(OBJEXT) liblist.$(OBJEXT) libmac.$(OBJEXT) \
+	libmisc.$(OBJEXT) libmod.$(OBJEXT) libnum.$(OBJEXT) \
+	libobj.$(OBJEXT) libomega.$(OBJEXT) libproc.$(OBJEXT) \
+	librx.$(OBJEXT) libsrfis.$(OBJEXT) libstr.$(OBJEXT) libsym.$(OBJEXT) \
+	libsys.$(OBJEXT) libvec.$(OBJEXT)
+libgauche_LDFLAGS = $(SONAME_FLAG) @SHLIB_DYLIB_LDFLAGS@
+
+libgc_pic_OBJECTS = $(top_builddir)/gc/.libs/*.$(OBJEXT)
+libgc_pic_LIBRARY = libgc_pic.a
+
+libatomic_ops_pic_OBJECTS = $(top_builddir)/gc/libatomic_ops/src/.libs/*.$(OBJEXT)
+@USE_INTERNAL_LIBATOMIC_OPS_TRUE@libatomic_ops_pic_LIBRARY = libatomic_ops_pic.a
+@USE_INTERNAL_LIBATOMIC_OPS_FALSE@libatomic_ops_pic_LIBRARY =
+GC_ATOMIC_OPS_LIBS = $(libatomic_ops_pic_LIBRARY) $(ATOMIC_OPS_LIBS)
+
+HEADERS = gauche.h $(INSTALL_SUBHEADERS) $(PRIVATE_HEADERS)
+
+OBJECTS = $(libgauche_OBJECTS) $(gosh_OBJECTS)
+
+@CROSS_COMPILING_no@all : $(LIBGAUCHE).$(SOEXT) $(INSTALL_BINS) $(GENERATED_SCRIPTS) test-extra$(EXEEXT)
+@CROSS_COMPILING_yes@all : $(LIBGAUCHE).$(SOEXT) $(INSTALL_BINS) $(GENERATED_SCRIPTS) $(host)-gauche-config
+
+gosh$(EXEEXT) : $(LIBGAUCHE).$(SOEXT) $(gosh_OBJECTS) 
+	@rm -f gosh$(EXEEXT)
+	$(LINK) $(gosh_LDFLAGS) -o gosh$(EXEEXT) $(gosh_OBJECTS) $(gosh_LDADD) $(LIBS)
+
+gosh-noconsole$(EXEEXT) : $(LIBGAUCHE).$(SOEXT) $(gosh_noconsole_OBJECTS) 
+	@rm -f gosh-noconsole$(EXEEXT)
+	$(LINK) $(gosh_LDFLAGS) -o gosh-noconsole$(EXEEXT) $(gosh_noconsole_OBJECTS) $(gosh_LDADD) $(LIBS) -Wl,--subsystem,windows
+
+test-extra$(EXEEXT) : $(LIBGAUCHE).$(SOEXT) $(test_extra_OBJECTS)
+	@rm -f test-extra$(EXEEXT)
+	$(LINK) $(test_extra_LDFLAGS) -o test-extra$(EXEEXT) $(test_extra_OBJECTS) $(test_extra_LDADD) $(LIBS)
+
+# NB: relink target is only relevant where rpath matter.  notably, we don't
+# need to relink gosh-noconsole.exe (windows no-console version).
+relink :
+	$(RELINK) $(libgauche_LDFLAGS) $(LIBGAUCHE).$(SOEXT) $(libgauche_OBJECTS) $(libgc_pic_LIBRARY) $(GC_ATOMIC_OPS_LIBS) $(LIBS)
+	$(RELINK) $(gosh_LDFLAGS) -o gosh$(EXEEXT)  $(gosh_OBJECTS) $(gosh_LDADD) $(LIBS)
+	$(RELINK) -o gauche-config$(EXEEXT) gauche-config.$(OBJEXT) $(LIBS)
+
+$(OBJECTS) : $(HEADERS)
+
+autoloads.c : autoloads.scm
+	$(BUILD_GOSH) autoloads.scm
+
+builtin-syms.c gauche/priv/builtin-syms.h : builtin-syms.scm
+	$(BUILD_GOSH) builtin-syms.scm
+
+vminsn.c gauche/vminsn.h ../lib/gauche/vm/insn.scm : vminsn.scm geninsn
+	$(BUILD_GOSH) geninsn $(srcdir)/vminsn.scm
+
+# NB: libsrfis.scm, lib/srfi/*.scm and doc/srfis.texi are all generated
+# by srfis.scm.  However, if we don't have srfi/0.scm but have libsrfis.scm,
+# we fail to regenerate srfi/0.scm since nothing depends on it.  So
+# we introduce fake dependency from libsrfis.scm to srfi/0.scm.
+$(top_builddir)/doc/srfis.texi $(top_builddir)/lib/srfi/0.scm : srfis.scm
+	$(BUILD_GOSH) $(srcdir)/srfis.scm $(top_builddir)
+
+libsrfis.scm : $(top_builddir)/lib/srfi/0.scm $(top_builddir)/doc/srfis.texi
+	@:
+
+compile.c  : compile.scm compile-0.scm compile-1.scm compile-2.scm \
+             compile-3.scm compile-4.scm compile-5.scm compile-i.scm \
+             $(PRECOMP_DEPENDENCY)
+libalpha.c : libalpha.scm $(PRECOMP_DEPENDENCY)
+libbool.c  : libbool.scm $(PRECOMP_DEPENDENCY)
+libchar.c  : libchar.scm $(PRECOMP_DEPENDENCY)
+libcode.c  : libcode.scm $(PRECOMP_DEPENDENCY)
+libcmp.c   : libcmp.scm $(PRECOMP_DEPENDENCY)
+libdict.c  : libdict.scm $(PRECOMP_DEPENDENCY)
+libeval.c  : libeval.scm $(PRECOMP_DEPENDENCY)
+libexc.c   : libexc.scm $(PRECOMP_DEPENDENCY)
+libfmt.c   : libfmt.scm $(PRECOMP_DEPENDENCY)
+libio.c    : libio.scm $(PRECOMP_DEPENDENCY)
+liblazy.c  : liblazy.scm $(PRECOMP_DEPENDENCY)
+liblist.c  : liblist.scm $(PRECOMP_DEPENDENCY)
+libmac.c   : libmac.scm $(PRECOMP_DEPENDENCY)
+libmisc.c  : libmisc.scm $(PRECOMP_DEPENDENCY)
+libnum.c   : libnum.scm $(PRECOMP_DEPENDENCY)
+libobj.c   : libobj.scm $(PRECOMP_DEPENDENCY)
+libomega.c : libomega.scm $(PRECOMP_DEPENDENCY)
+libproc.c  : libproc.scm $(PRECOMP_DEPENDENCY)
+librx.c    : librx.scm $(PRECOMP_DEPENDENCY)
+libsrfis.c : libsrfis.scm $(PRECOMP_DEPENDENCY)
+libstr.c   : libstr.scm $(PRECOMP_DEPENDENCY)
+libsym.c   : libsym.scm $(PRECOMP_DEPENDENCY)
+libsys.c   : libsys.scm $(PRECOMP_DEPENDENCY)
+libvec.c   : libvec.scm $(PRECOMP_DEPENDENCY)
+libextra.c : libextra.scm $(PRECOMP_DEPENDENCY)
+
+libmod.c   : libmod.scm $(PRECOMP_DEPENDENCY)
+	$(BUILD_GOSH) $(PRECOMP) --keep-private-macro=use $(srcdir)/libmod.scm
+
+$(libgc_pic_LIBRARY): $(GCLIB) $(libgc_pic_OBJECTS)
+	rm -f $@
+	$(AR) -rc $@ $(libgc_pic_OBJECTS)
+
+$(libatomic_ops_pic_LIBRARY): $(GCLIB) $(libatomic_ops_pic_OBJECTS)
+	rm -f $@
+	$(AR) -rc $@ $(libatomic_ops_pic_OBJECTS)
+
+
+# char_attr.c and gauche/priv/unicode_attr.h are automatically generated
+# by gen-unicode.scm, from unicode-data.scm.
+#
+# Unicode-data.scm itself is generated from Unicode character database.
+# It needs to be regenerated only when a new Unicode standard is published.
+# So we check in the generated data and do not force regeneration in every
+# build.
+# If you need to regenerate them, run
+#    make UNICODEDATA=/path/to/UnicodeData char-data
+# where /path/to/UnicodeData/ must contain UnicodeData.txt etc.
+# If you're not sure which files are needed, just run something like
+#    make UNICODEDATA=/ char-data
+# and the script will tell you the required files.
+char_attr.c : unicode-data.scm
+	$(BUILD_GOSH) $(srcdir)/gen-unicode.scm --compile $(srcdir)/unicode-data.scm
+
+char-data : gen-unicode.scm
+	@if test "$(UNICODEDATA)" = ""; then echo "Set UNICODEDATA to the path to the UnicodeData directory."; exit 1; fi
+	$(BUILD_GOSH) $(srcdir)/gen-unicode.scm --import $(UNICODEDATA) unicode-data.scm
+
+char.$(OBJEXT) : char.c char_attr.c
+
+core.$(OBJEXT) : core.c
+
+winmain.$(OBJEXT) : main.c $(HEADERS)
+
+symbol.$(OBJEXT) : builtin-syms.c
+
+port.$(OBJEXT) : port.c portapi.c
+
+vm.$(OBJEXT) : vminsn.c vmstat.c vmcall.c
+
+load.$(OBJEXT) : dl_dlopen.c dl_dummy.c dl_win.c dl_darwin.c
+
+paths.$(OBJEXT) : getdir_win.c getdir_dummy.c getdir_darwin.c paths_arch.c
+
+$(LIBGAUCHE).$(SOEXT) : $(libgauche_OBJECTS) $(libgc_pic_LIBRARY) $(libatomic_ops_pic_LIBRARY)
+	$(LINK) $(libgauche_LDFLAGS) $(LIBGAUCHE).$(SOEXT) $(libgauche_OBJECTS) $(libgc_pic_LIBRARY) $(GC_ATOMIC_OPS_LIBS) $(LIBS)
+	$(POSTBUILD)
+
+gauche-config$(EXEEXT) : gauche-config.$(OBJEXT)
+	$(LINK) -o gauche-config$(EXEEXT) gauche-config.$(OBJEXT) $(LIBS)
+
+# for cross build
+$(host)-gauche-config: gauche-config.c
+	$(BUILD_CC) $(BUILD_CFLAGS) $(DEFS) -o $@ gauche-config.c
+
+# we need thread settings in sync with gc.
+gauche/config_threads.h : $(top_builddir)/gc/include/config.h
+	rm -f gauche/config_threads.h
+	echo "/* Generated automatically from gc config header; do not edit. */" > gauche/config_threads.h
+	grep '^#define GC_[0-9A-Z_]*THREADS' $(top_builddir)/gc/include/config.h >> gauche/config_threads.h || :
+
+gauche-config.c paths_arch.c ../lib/gauche/config.scm : genconfig
+	$(SHELL) ./genconfig
+
+gauche-install : gauche-install.in
+	@rm -f gauche-install
+	echo "#!$(BIN_INSTALL_DIR)/gosh" > gauche-install && \
+	cat $(srcdir)/gauche-install.in >> gauche-install
+	@chmod -w+x gauche-install
+
+gauche-package : gauche-package.in
+	@rm -f gauche-package
+	echo "#!$(BIN_INSTALL_DIR)/gosh" > gauche-package && \
+	cat $(srcdir)/gauche-package.in >> gauche-package
+	@chmod -w+x gauche-package
+
+gauche-cesconv : gauche-cesconv.in
+	@rm -f gauche-cesconv
+	echo "#!$(BIN_INSTALL_DIR)/gosh" > gauche-cesconv && \
+	cat $(srcdir)/gauche-cesconv.in >> gauche-cesconv 
+	@chmod -w+x gauche-cesconv
+
+# static link -----------------------------------------
+# can be called after everything was built
+
+STATICINIT_SRCS = staticinit.c      \
+                  staticinit_gdbm.c \
+                  staticinit_mbed.c
+
+STATICINIT_OBJS = staticinit.$(OBJEXT)      \
+                  staticinit_gdbm.$(OBJEXT) \
+                  staticinit_mbed.$(OBJEXT)
+
+static : $(LIBGAUCHE_STATIC).a
+
+$(LIBGAUCHE_STATIC).a : all $(STATICINIT_OBJS)
+	rm -f $@
+	$(AR) -rc $@ $(libgauche_OBJECTS) \
+            `if [ X$(libgc_pic_LIBRARY) != X ]; then echo $(libgc_pic_OBJECTS); fi` \
+            `if [ X$(libatomic_ops_pic_LIBRARY) != X ]; then echo $(libatomic_ops_pic_OBJECTS); fi` \
+            $(STATICINIT_OBJS) \
+            `"$(srcdir)/list-ext-objects.sh" "$(top_builddir)"`
+
+$(STATICINIT_SRCS) : all gen-staticinit.scm
+	$(STATIC_GOSH) $(srcdir)/gen-staticinit.scm $(top_srcdir) $(top_builddir)
+
+# tests -----------------------------------------------
+TESTFILES  = `cat ../test/TESTS`
+TEST2FILES = `cat ../test/TESTS2`
+
+TESTRECORD = "$(top_builddir)/test.record"
+
+check : test
+
+test : gosh$(EXEEXT) test-vmstack$(EXEEXT) test-arith$(EXEEXT) test-extra$(EXEEXT)
+	@rm -f test.log $(TESTRECORD)
+	./test-vmstack >> test.log
+	./test-arith >> test.log
+	@for testfile in $(TESTFILES); do \
+	  GAUCHE_TEST_RECORD_FILE=$(TESTRECORD) \
+          top_srcdir=$(top_srcdir) \
+	  ./gosh -ftest -I$(top_srcdir)/test $$testfile >> test.log; \
+	done
+	@GAUCHE_TEST_RECORD_FILE=$(TESTRECORD) \
+          top_srcdir=$(top_srcdir) \
+	 ./test-extra $(top_srcdir)/test/capi.scm >> test.log
+	@GAUCHE_TEST_RECORD_FILE=$(TESTRECORD) \
+          top_srcdir=$(top_srcdir) \
+	 ./gosh -ftest -e "(define *case-fold* #f)" $(top_srcdir)/test/symcase.scm >> test.log
+	@GAUCHE_TEST_RECORD_FILE=$(TESTRECORD) \
+          top_srcdir=$(top_srcdir) \
+	 ./gosh -ftest -fcase-fold -e "(define *case-fold* #t)" $(top_srcdir)/test/symcase.scm >> test.log
+	@echo "See test.log for details."
+
+# tests run after ext/* tests
+test2 : gosh$(EXEEXT)
+	@for testfile in $(TEST2FILES); do \
+	  GAUCHE_TEST_RECORD_FILE=$(TESTRECORD) \
+          top_srcdir=$(top_srcdir) \
+	  ./gosh -ftest -I$(top_srcdir)/test $$testfile >> test.log; \
+	done
+
+# test-summary-check is called at the end of all tests and set up exit status.
+test-summary-check : gosh$(EXEEXT)
+	@GAUCHE_TEST_RECORD_FILE=$(TESTRECORD) \
+	  ./gosh -ftest -ugauche.test -Etest-summary-check -Eexit
+
+test-vmstack$(EXEEXT) : test-vmstack.$(OBJEXT) $(LIBGAUCHE).$(SOEXT)
+	$(LINK)	-o test-vmstack$(EXEEXT) test-vmstack.$(OBJEXT) $(gosh_LDADD) $(LIBS)
+
+test-arith$(EXEEXT) : test-arith.$(OBJEXT) $(LIBGAUCHE).$(SOEXT)
+	$(LINK)	-o test-arith$(EXEEXT) test-arith.$(OBJEXT) $(gosh_LDADD) $(LIBS)
+
+test-arith.$(OBJEXT) : gauche/priv/arith.h
+
+install-check :
+	@rm -rf test.log
+	@for f in `cat ../test/TESTS ../test/TESTS2`; do \
+	  "${bindir}/gosh" ../test/$$f install-check; \
+	done
+
+# clean ------------------------------------------------
+GENERATED = compile.c autoloads.c builtin-syms.c \
+	    gauche/priv/builtin-syms.h vminsn.c gauche/vminsn.h \
+            ../lib/gauche/vm/insn.scm \
+	    char_attr.c gauche/priv/unicode_attr.h \
+	    libsrfis.scm ../doc/srfis.texi \
+	    libalpha.c libbool.c libchar.c libcode.c libcmp.c libdict.c \
+	    libeval.c libexc.c libfmt.c libio.c liblazy.c liblist.c libmac.c \
+	    libmisc.c libmod.c libnum.c libobj.c libproc.c librx.c libstr.c \
+	    libsrfis.c libsym.c libsys.c libvec.c libomega.c libextra.c
+CONFIG_GENERATED = Makefile genconfig makeverslink gauche/config.h
+
+clean :
+	rm -rf core core.[0-9]* gosh$(EXEEXT) gauche-config$(EXEEXT) \
+	       test-vmstack$(EXEEXT) test-arith$(EXEEXT) test-extra$(EXEEXT) \
+	       $(GENERATED_SCRIPTS) gauche-config.c \
+	       $(LIBGAUCHE).$(SOEXT)* $(LIBGAUCHE_STATIC).a \
+               *.$(OBJEXT) *~ *.a *.t *.def *.exp *.exe *.dll \
+	       test.log test.dir so_locations gauche/*~ paths_arch.c \
+	       gauche/config_threads.h gauche-config.in.c \
+	       staticinit.c staticinit_gdbm.c staticinit_mbed.c \
+	       gauche-install.in.c gauche-package.in.c gauche-cesconv.in.c \
+	       $(host)-gauche-config.c $(host)-gauche-config
+
+distclean : clean
+	rm -f $(CONFIG_GENERATED)
+
+maintainer-clean : clean
+	rm -f $(CONFIG_GENERATED) $(GENERATED)
+
+# install ----------------------------------------------
+
+INSTALL_DIRS = "$(DESTDIR)$(HEADER_INSTALL_DIR)" \
+	       "$(DESTDIR)$(HEADER_INSTALL_DIR)/gauche" \
+	       "$(DESTDIR)$(SCM_INSTALL_DIR)" \
+	       "$(DESTDIR)$(ARCH_INSTALL_DIR)" \
+	       "$(DESTDIR)$(BIN_INSTALL_DIR)" \
+	       "$(DESTDIR)$(SITE_SCM_DIR)" \
+	       "$(DESTDIR)$(SITE_ARCH_DIR)"
+@CROSS_COMPILING_no@GAUCHE_CONFIG = ./gauche-config
+@CROSS_COMPILING_yes@GAUCHE_CONFIG = ./$(host)-gauche-config
+@CROSS_COMPILING_no@GAUCHE_INSTALL = ./gosh -ftest $(srcdir)/gauche-install.in
+@CROSS_COMPILING_yes@GAUCHE_INSTALL = gosh $(srcdir)/gauche-install.in
+
+install : install-core
+
+install-dirs : 
+	$(MKINSTDIR) $(INSTALL_DIRS)
+
+install-aux : all install-dirs
+	$(GAUCHE_INSTALL) -m 444 -S "$(srcdir)" $(INSTALL_HEADERS) "$(DESTDIR)$(HEADER_INSTALL_DIR)"
+	$(GAUCHE_INSTALL) -m 444 -S "$(srcdir)" $(INSTALL_SUBHEADERS) "$(DESTDIR)$(HEADER_INSTALL_DIR)/gauche"
+	$(GAUCHE_INSTALL) -m 444 -S "$(srcdir)" $(INSTALL_SCMS) "$(DESTDIR)$(SCM_INSTALL_DIR)"
+
+install-relink : install-aux
+	$(MAKE) relink
+
+install-core : install-relink
+	$(INSTALL)        $(INSTALL_LIBS) "$(DESTDIR)$(LIB_INSTALL_DIR)"
+	$(INSTALL)        $(INSTALL_LIBS) "$(DESTDIR)$(ARCH_INSTALL_DIR)"
+	$(INSTALL) -m 555 $(INSTALL_BINS) "$(DESTDIR)$(BIN_INSTALL_DIR)"
+	$(INSTALL) -m 555 $(INSTALL_BINS) "$(DESTDIR)$(ARCH_INSTALL_DIR)"
+	@case `$(GAUCHE_CONFIG) --arch` in *-cygwin*|*-mingw*) \
+	  $(INSTALL) $(INSTALL_LIBS) "$(DESTDIR)$(BIN_INSTALL_DIR)";;\
+	esac
+	$(POSTINSTALL)
+
+uninstall :
+	$(PREUNINSTALL)
+	for f in $(INSTALL_BINS); do rm -f "$(BIN_INSTALL_DIR)/$$f"; done
+	for f in $(INSTALL_LIBS); do rm -f "$(LIB_INSTALL_DIR)/$$f"; done
+	rm -rf "$(GAUCHE_ARCH_DIR)/@GAUCHE_VERSION@" "$(GAUCHE_DATA_DIR)/@GAUCHE_VERSION@" "$(GAUCHE_ARCH_DIR)/site/@GAUCHE_VERSION@"
+
+pre-package : $(GENERATED)
+
+# MinGW specific stuff --------------------------------
+
+# we don't use $(EXEEXT), for we know it is .exe on MinGW.
+# using it explicitly prevent make from being confused if $(EXEEXT) is empty.
+.in.exe:
+	$(SHELL) $(srcdir)/mingw-exify $< > $<.c
+	$(COMPILE) -c -o $<.o $<.c
+	$(LINK) $(gosh_LDFLAGS) -o $@ $<.o $(gosh_LDADD) $(LIBS)
+
+gauche-install.exe : $(LIBGAUCHE).$(SOEXT)
+gauche-package.exe : $(LIBGAUCHE).$(SOEXT)
+gauche-cesconv.exe : $(LIBGAUCHE).$(SOEXT)
+
+install-mingw:
+	$(INSTALL_DATA) $(INSTALL_MINGWHEADERS) "$(DESTDIR)$(HEADER_INSTALL_DIR)/gauche"
+	$(INSTALL_DATA) gauche-install.exe.manifest "$(DESTDIR)$(BIN_INSTALL_DIR)"

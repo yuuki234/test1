@@ -1,0 +1,23 @@
+srcdir       = @srcdir@
+top_builddir = @top_builddir@
+top_srcdir   = @top_srcdir@
+
+include ../Makefile.ext
+
+SCM_CATEGORY = gauche
+
+LIBFILES = gauche--vport.$(SOEXT)
+SCMFILES = vport.scm
+
+OBJECTS = vport.$(OBJEXT)
+
+GENERATED = Makefile
+XCLEANFILES =
+
+all : $(LIBFILES)
+
+gauche--vport.$(SOEXT) : $(OBJECTS)
+	$(MODLINK) gauche--vport.$(SOEXT) $(OBJECTS) $(EXT_LIBGAUCHE) $(LIBS)
+
+install : install-std
+
